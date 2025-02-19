@@ -18,7 +18,9 @@
 # *   License along with FreeCAD; if not, write to the Free Software        *
 # *   Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  *
 # *   USA                                                                   *
-# *                                                                         *
+# *          
+# * Vector Hasting (VH) on 2/17/2025 added Dwell argument for spindles      *
+# *     that need additional time to spin up #VectorHasting                 *
 # ***************************************************************************
 
 import FreeCAD
@@ -76,6 +78,11 @@ parser.add_argument(
     action="store_true",
     help="suppress tool length offset (G43) following tool changes",
 )
+#* VH
+parser.add_argument(
+    "--dwell",
+    help='set number of seconds to wait after spindle start for spin-up. Follow --dwell with "n" to insert G4 Pn after M3 command',
+)
 
 TOOLTIP_ARGS = parser.format_help()
 
@@ -89,6 +96,8 @@ USE_TLO = True  # if true G43 will be output following tool changes
 OUTPUT_DOUBLES = True  # if false duplicate axis values are suppressed if the same as previous line.
 COMMAND_SPACE = " "
 LINENR = 100  # line number starting value
+USE_DWELL = False  # VH 
+OUTPUT_DWELL = False # VH
 
 # These globals will be reflected in the Machine configuration of the project
 UNITS = "G21"  # G21 for metric, G20 for us standard
@@ -119,6 +128,8 @@ POST_OPERATION = """"""
 # Tool Change commands will be inserted before a tool change
 TOOL_CHANGE = """"""
 
+# Default Dwell Time = 0  VH
+DWELLTIME = "0"
 
 def processArguments(argstring):
     global OUTPUT_HEADER
@@ -134,6 +145,9 @@ def processArguments(argstring):
     global MODAL
     global USE_TLO
     global OUTPUT_DOUBLES
+    global DWELLTIME
+    global USE_DWELL
+    global OUTPUT_DWELL
 
     try:
         args = parser.parse_args(shlex.split(argstring))
@@ -163,6 +177,9 @@ def processArguments(argstring):
         if args.axis_modal:
             print("here")
             OUTPUT_DOUBLES = False
+        if args.dwell is not None: # VH
+            DWELLTIME = args.dwell # VH
+            USE_DWELL = True # VH
 
     except Exception:
         return False
@@ -292,6 +309,7 @@ def parse(pathobj):
     global OUTPUT_DOUBLES
     global UNIT_FORMAT
     global UNIT_SPEED_FORMAT
+    global OUTPUT_DWELL # VH
 
     out = ""
     lastcommand = None
@@ -422,6 +440,12 @@ def parse(pathobj):
                     tool_height = "\nG43 H" + str(int(c.Parameters["T"]))
                     outstring.append(tool_height)
 
+            # VH Check for Spindle Start
+            if command == "M3":
+                # If using Add Dwell
+                if USE_DWELL:
+                    OUTPUT_DWELL = True
+
             if command == "message":
                 if OUTPUT_COMMENTS is False:
                     out = []
@@ -439,6 +463,11 @@ def parse(pathobj):
                 # Note: Do *not* strip `out`, since that forces the allocation
                 # of a contiguous string & thus quadratic complexity.
                 out += "\n"
+            
+            # VH Add dwell after M3
+            if OUTPUT_DWELL is True:
+                out += linenumber() + "G4 " + DWELLTIME + " \n"
+                OUTPUT_DWELL = False
 
         return out
 
